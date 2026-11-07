@@ -10,6 +10,7 @@ import time
 import calendar
 import datetime
 import uuid
+import xbmc
 import os
 from urllib.parse import parse_qsl
 
@@ -305,7 +306,33 @@ def BROWSE_GAME(plugin, gameID, cache_max_age=0):
                                 max_age=cache_max_age
                             ).json()
     found = False
-    for play_option in play_options.get('Schedules', []) + play_options.get('Vods', []):
+    seen = set()
+    for schedule in play_options.get('Schedules', []):
+        for production in schedule.get('Productions', []):
+            if production.get('Id') in seen:
+                continue
+            seen.add(production.get('Id'))
+            names = production.get('DisplayName') or []
+            name = names[0].get('Value') if names else None
+            services = production.get('Services') or []
+            if not name or not services or not production.get('PlayActions'):
+                continue
+            found = True
+            options = (('Live', False), ('Start from Beginning', True))
+            if 'In Arena' in name:
+                options = (('Live only', False),)
+            for label, from_start in options:
+                yield Listitem.from_dict(
+                                        PLAY_GAME,
+                                        bold('%s - %s' % (name, label)),
+                                        params = {
+                                            'gameID': gameID,
+                                            'videoProfileId': services[0]['MediaId'],
+                                            'live': '%s,%s' % (production.get('Id'), services[0].get('Id')),
+                                            'from_start': from_start
+                                        }
+                                    )
+    for play_option in play_options.get('Vods', []):
         if not play_option.get('PlayActions'):
             continue
         names = play_option.get('DisplayName') or []
@@ -387,7 +414,7 @@ def close_previous_session(headers):
 
 
 
-def resolve_stream(plugin, mediaId, application_token, rights_mode=1):
+def resolve_stream(plugin, mediaId, application_token, rights_mode=1, live=False):
     access_token = get_token()
     if not access_token:
         return False
@@ -413,7 +440,7 @@ def resolve_stream(plugin, mediaId, application_token, rights_mode=1):
     sessions = close_previous_session(headers)
     sessionId = uuid.uuid1()
     roll = urlquick.post(
-                            PLAY_ROLL_URL % (mediaId, sessionId),
+                            PLAY_ROLL_URL % (mediaId, sessionId) + ('&wave=&enablelowlatency=false' if live else ''),
                             headers=headers,
                             data=json.dumps({'roll': {'inhome': 'no', 'rightsMode': rights_mode}}),
                             max_age=0,
@@ -477,5 +504,27 @@ def resolve_stream(plugin, mediaId, application_token, rights_mode=1):
 
 
 @Resolver.register
-def PLAY_GAME(plugin, gameID, videoProfileId):
-    yield resolve_stream(plugin, videoProfileId, videoProfileId.split('_Jitp')[0])
+def PLAY_GAME(plugin, gameID, videoProfileId, live=False, from_start=False):
+    if not live:
+        yield resolve_stream(plugin, videoProfileId, videoProfileId.split('_Jitp')[0])
+        return
+    production_id, service_id = live.split(',')
+    for token in (production_id, service_id):
+        liz = resolve_stream(plugin, videoProfileId, token, live=True)
+        if liz:
+            break
+    yield liz
+    if liz:
+        player = xbmc.Player()
+        monitor = xbmc.Monitor()
+        for _ in range(60):
+            if monitor.waitForAbort(1):
+                return
+            if player.isPlayingVideo() and player.getTime() > 0:
+                if monitor.waitForAbort(0.5):
+                    return
+                if from_start:
+                    player.seekTime(0)
+                elif player.getTotalTime() > 60:
+                    player.seekTime(player.getTotalTime() - 10)
+                return
