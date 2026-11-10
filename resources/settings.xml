@@ -9,6 +9,8 @@
         <setting id="cache_thumb" type="bool" label="30012" default="false"/>
         <setting id="disable_msgs" type="bool" label="30013" default="false"/>
         <setting id="hide_scores" type="bool" label="30016" default="false"/>
+        <setting id="country_code" type="text" label="30017" default=""/>
+        <setting id="postal_code" type="text" label="30018" default=""/>
         <setting id="enable_cal" type="bool" label="30014" default="false"/>
     </category>
 </settings>
