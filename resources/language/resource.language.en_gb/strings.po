@@ -61,6 +61,14 @@ msgctxt "#30016"
 msgid "Hide Scores"
 msgstr ""
 
+msgctxt "#30017"
+msgid "Country Code (blank = detect from IP)"
+msgstr ""
+
+msgctxt "#30018"
+msgid "Postal Code (optional)"
+msgstr ""
+
 # msgs
 msgctxt "#30201"
 msgid "Please fill Email and Password in the addon's settings menu"

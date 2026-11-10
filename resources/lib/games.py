@@ -300,8 +300,9 @@ def BROWSE_GAME(plugin, gameID, cache_max_age=0):
     if not headers:
         yield False
         return
+    location = get_location_detail()
     play_options = urlquick.get(
-                                PLAY_OPTIONS_URL % gameID,
+                                PLAY_OPTIONS_URL % gameID + (('&locationDetail=%s' % location) if location else ''),
                                 headers=headers,
                                 max_age=cache_max_age
                             ).json()
@@ -357,6 +358,27 @@ def BROWSE_GAME(plugin, gameID, cache_max_age=0):
                      )
         yield False
         return
+
+
+
+def get_country():
+    country = Script.setting.get_string('country_code').strip().upper()
+    if not country:
+        try:
+            country = (urlquick.get('https://ipwho.is/', max_age=60 * 60).json().get('country_code') or '').upper()
+        except Exception:
+            country = ''
+    return country
+
+
+
+def get_location_detail():
+    country = get_country()
+    postal = Script.setting.get_string('postal_code').strip()
+    if not country:
+        return None
+    detail = {'PostalCode': postal, 'CountryCode': country} if postal else {'CountryCode': country}
+    return b64encode(json.dumps(detail, separators=(',', ':')).encode('ascii')).decode('ascii')
 
 
 
@@ -438,11 +460,15 @@ def resolve_stream(plugin, mediaId, application_token, rights_mode=1, live=False
         'deviceprofile': device_profile
     }
     sessions = close_previous_session(headers)
+    roll_body = {'inhome': 'no', 'rightsMode': rights_mode}
+    location = get_location_detail()
+    if location:
+        roll_body['locationDetail'] = location
     sessionId = uuid.uuid1()
     roll = urlquick.post(
                             PLAY_ROLL_URL % (mediaId, sessionId) + ('&wave=&enablelowlatency=false' if live else ''),
                             headers=headers,
-                            data=json.dumps({'roll': {'inhome': 'no', 'rightsMode': rights_mode}}),
+                            data=json.dumps({'roll': roll_body}),
                             max_age=0,
                             raise_for_status=False
                         ).json()
